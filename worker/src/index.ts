@@ -5,8 +5,9 @@
  * ships with raw API keys. Keys are stored as Cloudflare secrets.
  *
  * Routes:
- *   POST /chat  → Anthropic Messages API (streaming)
- *   POST /tts   → ElevenLabs TTS API
+ *   POST /chat      → Anthropic Messages API (streaming)
+ *   POST /tts       → ElevenLabs TTS API
+ *   POST /diagnose  → AgentGateway AG-CTO companion (cross-tool wiring diagnosis)
  */
 
 interface Env {
@@ -14,6 +15,9 @@ interface Env {
   ELEVENLABS_API_KEY: string;
   ELEVENLABS_VOICE_ID: string;
   ASSEMBLYAI_API_KEY: string;
+  // AG-CTO partner: AgentGateway's diagnose endpoint. Clicky supplies the screen
+  // signal; AgentGateway reaches into the connectors Clicky can't see.
+  AGENTGATEWAY_DIAGNOSE_URL: string;
 }
 
 export default {
@@ -35,6 +39,10 @@ export default {
 
       if (url.pathname === "/transcribe-token") {
         return await handleTranscribeToken(env);
+      }
+
+      if (url.pathname === "/diagnose") {
+        return await handleDiagnose(request, env);
       }
     } catch (error) {
       console.error(`[${url.pathname}] Unhandled error:`, error);
@@ -102,6 +110,30 @@ async function handleTranscribeToken(env: Env): Promise<Response> {
   const data = await response.text();
   return new Response(data, {
     status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+// Bridge to the AgentGateway AG-CTO companion. Clicky's job is the screen + the
+// voice; AgentGateway's job is reaching into AWS/IAM/provider consoles. This
+// route just forwards the signal and relays the grounded diagnosis back.
+async function handleDiagnose(request: Request, env: Env): Promise<Response> {
+  const target =
+    env.AGENTGATEWAY_DIAGNOSE_URL || "http://localhost:3000/api/diagnose";
+  const body = await request.text();
+
+  const response = await fetch(target, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  });
+
+  const payload = await response.text();
+  if (!response.ok) {
+    console.error(`[/diagnose] AgentGateway error ${response.status}: ${payload}`);
+  }
+  return new Response(payload, {
+    status: response.status,
     headers: { "content-type": "application/json" },
   });
 }
