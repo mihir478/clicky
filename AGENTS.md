@@ -32,9 +32,10 @@ The app never calls external APIs directly. All requests go through a Cloudflare
 | `POST /chat` | `api.anthropic.com/v1/messages` | Claude vision + streaming chat |
 | `POST /tts` | `api.elevenlabs.io/v1/text-to-speech/{voiceId}` | ElevenLabs TTS audio |
 | `POST /transcribe-token` | `streaming.assemblyai.com/v3/token` | Fetches a short-lived (480s) AssemblyAI websocket token |
+| `POST /diagnose` | AgentGateway `/api/diagnose` | Forwards a screen signal to the AG-CTO companion and relays its grounded, cross-tool diagnosis back for TTS |
 
 Worker secrets: `ANTHROPIC_API_KEY`, `ASSEMBLYAI_API_KEY`, `ELEVENLABS_API_KEY`
-Worker vars: `ELEVENLABS_VOICE_ID`
+Worker vars: `ELEVENLABS_VOICE_ID`, `AGENTGATEWAY_DIAGNOSE_URL`
 
 ### Key Architecture Decisions
 
@@ -74,7 +75,7 @@ Worker vars: `ELEVENLABS_VOICE_ID`
 | `ClickyAnalytics.swift` | ~121 | PostHog analytics integration for usage tracking. |
 | `WindowPositionManager.swift` | ~262 | Window placement logic, Screen Recording permission flow, and accessibility permission helpers. |
 | `AppBundleConfiguration.swift` | ~28 | Runtime configuration reader for keys stored in the app bundle Info.plist. |
-| `worker/src/index.ts` | ~142 | Cloudflare Worker proxy. Three routes: `/chat` (Claude), `/tts` (ElevenLabs), `/transcribe-token` (AssemblyAI temp token). |
+| `worker/src/index.ts` | ~165 | Cloudflare Worker proxy. Four routes: `/chat` (Claude), `/tts` (ElevenLabs), `/transcribe-token` (AssemblyAI temp token), `/diagnose` (AgentGateway AG-CTO companion bridge). |
 
 ## Build & Run
 

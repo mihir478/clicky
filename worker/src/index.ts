@@ -118,22 +118,24 @@ async function handleTranscribeToken(env: Env): Promise<Response> {
 // voice; AgentGateway's job is reaching into AWS/IAM/provider consoles. This
 // route just forwards the signal and relays the grounded diagnosis back.
 async function handleDiagnose(request: Request, env: Env): Promise<Response> {
-  const target =
+  const agentGatewayDiagnoseUrl =
     env.AGENTGATEWAY_DIAGNOSE_URL || "http://localhost:3000/api/diagnose";
-  const body = await request.text();
+  const requestBody = await request.text();
 
-  const response = await fetch(target, {
+  const agentGatewayResponse = await fetch(agentGatewayDiagnoseUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body,
+    body: requestBody,
   });
 
-  const payload = await response.text();
-  if (!response.ok) {
-    console.error(`[/diagnose] AgentGateway error ${response.status}: ${payload}`);
+  const diagnosisPayload = await agentGatewayResponse.text();
+  if (!agentGatewayResponse.ok) {
+    console.error(
+      `[/diagnose] AgentGateway error ${agentGatewayResponse.status}: ${diagnosisPayload}`
+    );
   }
-  return new Response(payload, {
-    status: response.status,
+  return new Response(diagnosisPayload, {
+    status: agentGatewayResponse.status,
     headers: { "content-type": "application/json" },
   });
 }
