@@ -124,7 +124,13 @@ async function handleDiagnose(request: Request, env: Env): Promise<Response> {
 
   const agentGatewayResponse = await fetch(agentGatewayDiagnoseUrl, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      // When AgentGateway is exposed via a dev tunnel, skip the tunnel's
+      // browser-interstitial so the JSON body comes back clean.
+      "bypass-tunnel-reminder": "true",
+      "ngrok-skip-browser-warning": "true",
+    },
     body: requestBody,
   });
 
