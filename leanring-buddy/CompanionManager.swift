@@ -81,7 +81,13 @@ final class CompanionManager: ObservableObject {
     }()
 
     private lazy var diagnoseAPIClient: DiagnoseAPIClient = {
-        return DiagnoseAPIClient(proxyURL: "\(Self.workerBaseURL)/diagnose")
+        // Optional override for local testing — set CLICKY_DIAGNOSE_URL in the Run
+        // scheme's environment (e.g. http://localhost:8787/diagnose for a local
+        // `wrangler dev` Worker). Defaults to the deployed Worker's /diagnose route,
+        // so chat/TTS/transcription are unaffected.
+        let diagnoseURL = ProcessInfo.processInfo.environment["CLICKY_DIAGNOSE_URL"]
+            ?? "\(Self.workerBaseURL)/diagnose"
+        return DiagnoseAPIClient(proxyURL: diagnoseURL)
     }()
 
     /// Conversation history so Claude remembers prior exchanges within a session.
