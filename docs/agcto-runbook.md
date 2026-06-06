@@ -61,6 +61,39 @@ Expect:
 - Terminal 2: a `POST /diagnose` line
 - Terminal 1: the request landing
 
+## Demo use cases
+
+Say each line to Clicky (hold **Control + Option**). Each leads with a trigger
+phrase so it routes to AG-CTO. With Bedrock/a real model the answers are live;
+with `AGCTO_LLM_STUB=1` they're deterministic `[stub]` text (the loop still proves
+out). The point of each: a screen-only assistant guesses, AG-CTO names the
+*systems it would inspect*.
+
+**1. Cloud IAM / model access (AWS Bedrock)**
+> "**diagnose this** — AccessDeniedException calling InvokeModel on Bedrock in us-east-1."
+- Would inspect: Bedrock model-access state · the IAM role policy
+- Expect: model access not enabled and/or missing `bedrock:InvokeModel`; fix names both.
+
+**2. Provider account flag (ElevenLabs)**
+> "**what's wrong** — ElevenLabs returns 401 detected_unusual_activity, free tier disabled."
+- Would inspect: ElevenLabs billing/subscription · which key is wired in
+- Expect: the flag overrides credit balance → upgrade to paid, drop the VPN, don't make another free account.
+
+**3. Deploy / secret confusion (Cloudflare)**
+> "**debug this** — wrangler deploy doesn't list my secrets, did they save?"
+- Would inspect: the `wrangler deploy` output · `wrangler secret list`
+- Expect: deploy omits secrets by design; verify with `secret list`; `secret put` overwrites — no delete needed.
+
+**4. Runtime / infra (Postgres)**
+> "**why is this failing** — psql FATAL: remaining connection slots are reserved for superuser."
+- Would inspect: `pg_stat_activity` · `max_connections` · the pooler config
+- Expect: connection-pool exhaustion → add PgBouncer / raise limits / fix a connection leak.
+
+**5. Show the learning (recall from memory)**
+Run #1, then say a **reworded** version:
+> "**diagnose** bedrock invoke model access denied in us-east-1, can't reach the model."
+- Expect: `source: memory` (recalled) with `recall.similarity` — proves the KB learned; no second model call.
+
 ## Manual checks (no app)
 ```bash
 # Worker → AgentGateway hop
