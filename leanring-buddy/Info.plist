@@ -16,5 +16,13 @@
 	<string>Clicky needs screen recording access to see your screen and help you.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Clicky uses speech recognition to transcribe your voice when you talk to it</string>
+	<!-- Allows plain-http connections to localhost (e.g. a local `wrangler dev`
+	     Worker during AG-CTO diagnose testing). Only relaxes ATS for local
+	     addresses; production HTTPS endpoints are unaffected. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

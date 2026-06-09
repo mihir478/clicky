@@ -4,3 +4,5 @@ compatibility_date = "2024-01-01"
 
 [vars]
 ELEVENLABS_VOICE_ID = "kPzsL2i3teMYv0FxEYQ6"
+# AG-CTO partner endpoint. For local demo, AgentGateway runs at :3000.
+AGENTGATEWAY_DIAGNOSE_URL = "http://localhost:3000/api/diagnose"

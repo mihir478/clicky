@@ -70,7 +70,7 @@ final class CompanionManager: ObservableObject {
 
     /// Base URL for the Cloudflare Worker proxy. All API requests route
     /// through this so keys never ship in the app binary.
-    private static let workerBaseURL = "https://your-worker-name.your-subdomain.workers.dev"
+    private static let workerBaseURL = "https://clicky-proxy.mihirsanghavi.workers.dev"
 
     private lazy var claudeAPI: ClaudeAPI = {
         return ClaudeAPI(proxyURL: "\(Self.workerBaseURL)/chat", model: selectedModel)
@@ -78,6 +78,16 @@ final class CompanionManager: ObservableObject {
 
     private lazy var elevenLabsTTSClient: ElevenLabsTTSClient = {
         return ElevenLabsTTSClient(proxyURL: "\(Self.workerBaseURL)/tts")
+    }()
+
+    private lazy var diagnoseAPIClient: DiagnoseAPIClient = {
+        // Optional override for local testing — set CLICKY_DIAGNOSE_URL in the Run
+        // scheme's environment (e.g. http://localhost:8787/diagnose for a local
+        // `wrangler dev` Worker). Defaults to the deployed Worker's /diagnose route,
+        // so chat/TTS/transcription are unaffected.
+        let diagnoseURL = ProcessInfo.processInfo.environment["CLICKY_DIAGNOSE_URL"]
+            ?? "\(Self.workerBaseURL)/diagnose"
+        return DiagnoseAPIClient(proxyURL: diagnoseURL)
     }()
 
     /// Conversation history so Claude remembers prior exchanges within a session.
@@ -521,7 +531,7 @@ final class CompanionManager: ObservableObject {
                         self?.lastTranscript = finalTranscript
                         print("🗣️ Companion received transcript: \(finalTranscript)")
                         ClickyAnalytics.trackUserMessageSent(transcript: finalTranscript)
-                        self?.sendTranscriptToClaudeWithScreenshot(transcript: finalTranscript)
+                        self?.handleFinalTranscript(finalTranscript)
                     }
                 )
             }
@@ -577,6 +587,85 @@ final class CompanionManager: ObservableObject {
     """
 
     // MARK: - AI Response Pipeline
+
+    /// Phrases that route a request to the AG-CTO companion (cross-tool wiring
+    /// diagnosis) instead of the normal screenshot+Claude companion flow.
+    private static let diagnoseTriggerPhrases = [
+        "diagnose", "what's wrong", "what is wrong", "why is this failing",
+        "why is it failing", "why is this broken", "debug this",
+        "fix this error", "help me fix", "what's causing", "what is causing",
+    ]
+
+    private static func isDiagnoseRequest(_ transcript: String) -> Bool {
+        let lowercased = transcript.lowercased()
+        return diagnoseTriggerPhrases.contains { lowercased.contains($0) }
+    }
+
+    /// Routes a finalized transcript: "diagnose this" requests go to AgentGateway's
+    /// AG-CTO companion via the /diagnose bridge; everything else is a normal
+    /// companion question (screenshot + Claude).
+    private func handleFinalTranscript(_ transcript: String) {
+        if Self.isDiagnoseRequest(transcript) {
+            runDiagnosis(transcript: transcript)
+        } else {
+            sendTranscriptToClaudeWithScreenshot(transcript: transcript)
+        }
+    }
+
+    /// Sends the spoken signal to the AG-CTO companion and speaks back its
+    /// grounded diagnosis. Clicky supplies the signal (the error the user read
+    /// aloud or described); AgentGateway reaches into the systems Clicky can't
+    /// see and recalls prior diagnoses from its knowledge base. Mirrors the
+    /// Claude pipeline's voice-state, TTS, and transient-hide handling.
+    private func runDiagnosis(transcript: String) {
+        currentResponseTask?.cancel()
+        elevenLabsTTSClient.stopPlayback()
+
+        currentResponseTask = Task {
+            voiceState = .processing
+
+            do {
+                let diagnosis = try await diagnoseAPIClient.diagnose(signal: transcript)
+
+                guard !Task.isCancelled else { return }
+
+                let spokenText = diagnosis.spoken
+                print("🩺 AG-CTO diagnosis: source=\(diagnosis.source) backend=\(diagnosis.backend) confidence=\(diagnosis.confidence) learned=\(diagnosis.learned)")
+
+                conversationHistory.append((
+                    userTranscript: transcript,
+                    assistantResponse: spokenText
+                ))
+                if conversationHistory.count > 10 {
+                    conversationHistory.removeFirst(conversationHistory.count - 10)
+                }
+
+                ClickyAnalytics.trackAIResponseReceived(response: spokenText)
+
+                if !spokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    do {
+                        try await elevenLabsTTSClient.speakText(spokenText)
+                        voiceState = .responding
+                    } catch {
+                        ClickyAnalytics.trackTTSError(error: error.localizedDescription)
+                        print("⚠️ ElevenLabs TTS error: \(error)")
+                        speakCreditsErrorFallback()
+                    }
+                }
+            } catch is CancellationError {
+                // User spoke again — diagnosis was interrupted
+            } catch {
+                ClickyAnalytics.trackResponseError(error: error.localizedDescription)
+                print("⚠️ AG-CTO diagnose error: \(error)")
+                speakCreditsErrorFallback()
+            }
+
+            if !Task.isCancelled {
+                voiceState = .idle
+                scheduleTransientHideIfNeeded()
+            }
+        }
+    }
 
     /// Captures a screenshot, sends it along with the transcript to Claude,
     /// and plays the response aloud via ElevenLabs TTS. The cursor stays in
